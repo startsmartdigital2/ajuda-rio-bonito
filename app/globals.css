@@ -1,0 +1,33 @@
+/* Onde: app/globals.css */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+/* Adicione este código ao final de app/globals.css */
+
+/* Estilos para Impressão */
+@media print {
+  /* Esconde tudo por padrão na impressão */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Torna a área da lista de vítimas e seus conteúdos visíveis */
+  #lista-para-impressao, #lista-para-impressao * {
+    visibility: visible;
+  }
+
+  /* Posiciona a lista no topo da página de impressão */
+  #lista-para-impressao {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+
+  /* Remove sombras e bordas desnecessárias na impressão */
+  #lista-para-impressao .no-print-style {
+    box-shadow: none !important;
+    border: none !important;
+  }
+}
