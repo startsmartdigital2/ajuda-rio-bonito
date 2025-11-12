@@ -1,175 +1,219 @@
 // Onde: app/page.js
-// VERSÃO FINAL DO FORMULÁRIO COM TODAS AS MELHORIAS
+// CÓDIGO FINAL, 100% SINCRONIZADO COM A NOVA TABELA 'vitimas'
 
-'use client';
+"use client";
 
 import { useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
-export default function FormularioCadastro() {
-  const [message, setMessage] = useState('');
-  const [membros, setMembros] = useState([{ nome: '', idade: '', pcd: false }]);
+export default function Home() {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionMessage, setSubmissionMessage] = useState('');
+  const [membros, setMembros] = useState([{ nome: '', data_nascimento: '' }]);
 
-  const handleMembroChange = (index, field, value) => {
-    const novosMembros = [...membros];
-    novosMembros[index][field] = value;
+  const adicionarMembro = () => setMembros([...membros, { nome: '', data_nascimento: '' }]);
+  const removerMembro = (index) => setMembros(membros.filter((_, i) => i !== index));
+  const handleMembroChange = (index, event) => {
+    const novosMembros = membros.map((membro, i) => 
+      i === index ? { ...membro, [event.target.name]: event.target.value } : membro
+    );
     setMembros(novosMembros);
-  };
-
-  const addMembroField = () => {
-    setMembros([...membros, { nome: '', idade: '', pcd: false }]);
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    setMessage('Enviando, por favor aguarde...');
+    setIsSubmitting(true);
+    setSubmissionMessage('');
 
-    const formData = new FormData(event.currentTarget);
-    const formProps = Object.fromEntries(formData.entries());
+    const formData = new FormData(event.target);
+    const data = Object.fromEntries(formData.entries());
+
+    const submissionData = {
+      nome_responsavel: data.nome_responsavel,
+      cpf_responsavel: data.cpf_responsavel,
+      rg_responsavel: data.rg_responsavel || null,
+      data_nascimento_responsavel: data.data_nascimento_responsavel,
+      telefone_contato: data.telefone_contato,
+      telefone_secundario: data.telefone_secundario || null,
+      endereco_completo: data.endereco_completo,
+      adultos: parseInt(data.adultos, 10) || 0,
+      criancas: parseInt(data.criancas, 10) || 0,
+      pcd: formData.get('pcd') === 'on',
+      gestante: formData.get('gestante') === 'on',
+      membros_familia: membros.filter(m => m.nome),
+      situacao_moradia: data.situacao_moradia,
+      situacao_emprego: data.situacao_emprego,
+      possui_veiculo: data.possui_veiculo,
+      veiculo_atingido: formData.get('veiculo_atingido') === 'on',
+      necessidades_urgentes: data.necessidades_urgentes,
+      observacoes: data.observacoes || null,
+    };
 
     try {
-      const { data: newVictim, error: victimError } = await supabase
-        .from('vitimas')
-        .insert({
-          // Campos existentes
-          nome_responsavel: formProps.nome_responsavel,
-          cpf: formProps.cpf,
-          rg: formProps.rg,
-          data_nascimento: formProps.data_nascimento,
-          telefone: formProps.telefone,
-          telefone_secundario: formProps.telefone_secundario,
-          endereco: formProps.endereco,
-          numero_moradores: parseInt(formProps.numero_moradores),
-          situacao_moradia: formProps.situacao_moradia,
-          necessidades: formData.getAll('necessidades'),
-          // Novos campos
-          outras_necessidades: formProps.outras_necessidades,
-          situacao_emprego: formProps.situacao_emprego,
-        })
-        .select()
-        .single();
-
-      if (victimError) throw victimError;
-
-      const membrosParaInserir = membros
-        .filter(m => m.nome.trim() !== '')
-        .map(m => ({
-          vitima_id: newVictim.id,
-          nome_membro: m.nome,
-          idade: m.idade ? parseInt(m.idade) : null,
-          pcd: m.pcd,
-        }));
-
-      if (membrosParaInserir.length > 0) {
-        const { error: membrosError } = await supabase.from('membros_familia').insert(membrosParaInserir);
-        if (membrosError) throw membrosError;
-      }
-
-      setMessage('Cadastro realizado com sucesso! Obrigado pela sua colaboração.');
+      const { error } = await supabase.from('vitimas').insert([submissionData]);
+      if (error) throw error;
+      setSubmissionMessage('Cadastro realizado com sucesso! Obrigado pela sua colaboração.');
       event.target.reset();
-      setMembros([{ nome: '', idade: '', pcd: false }]);
-
+      setMembros([{ nome: '', data_nascimento: '' }]);
     } catch (error) {
-      console.error('Erro no cadastro:', error);
-      if (error.message.includes('duplicate key value')) {
-        setMessage('Erro: Este CPF já foi cadastrado. Verifique os dados.');
+      console.error('Erro do Supabase:', error);
+      if (error.code === '23505') {
+        setSubmissionMessage('Erro: Este CPF já foi cadastrado. Para atualizar, procure um ponto de apoio.');
       } else {
-        setMessage(`Erro ao cadastrar: ${error.message}`);
+        setSubmissionMessage(`Erro no cadastro: ${error.message}`);
       }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
-    // O container principal agora está mais limpo, pois o fundo e o padding vêm do layout
-    <div className="container mx-auto p-4 sm:p-6 lg:p-8">
-      <div className="w-full max-w-3xl mx-auto bg-white p-8 rounded-lg shadow-lg">
-        <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">Formulário de Cadastro de Famílias</h2>
-        
+    <div className="container mx-auto p-4">
+      <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-xl p-6 md:p-8">
+        <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">Formulário de Cadastro de Ajuda</h2>
         <form onSubmit={handleSubmit} className="space-y-8">
-          {/* Seção de Dados do Responsável */}
-          <fieldset className="space-y-4">
-            <legend className="font-bold text-xl text-gray-700 border-b-2 border-emerald-200 pb-2 mb-4">1. Dados do Responsável</legend>
-            {/* ... campos de nome, cpf, rg, etc. ... */}
-            <input name="nome_responsavel" placeholder="Nome Completo do Responsável" className="w-full p-3 border rounded-md" required />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <input name="cpf" placeholder="CPF (apenas números)" className="w-full p-3 border rounded-md" required pattern="\d{11}" title="Digite um CPF válido com 11 dígitos." />
-              <input name="rg" placeholder="RG (opcional)" className="w-full p-3 border rounded-md" />
-            </div>
-            <div>
-              <label htmlFor="data_nascimento" className="text-sm font-medium text-gray-600">Data de Nascimento</label>
-              <input id="data_nascimento" name="data_nascimento" type="date" className="w-full p-3 border rounded-md" />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <input name="telefone" type="tel" placeholder="Telefone Principal" className="w-full p-3 border rounded-md" required />
-              <input name="telefone_secundario" type="tel" placeholder="Telefone Secundário (opcional)" className="w-full p-3 border rounded-md" />
-            </div>
-          </fieldset>
-
-          {/* Seção de Composição Familiar */}
-          <fieldset className="space-y-4">
-            <legend className="font-bold text-xl text-gray-700 border-b-2 border-emerald-200 pb-2 mb-4">2. Composição Familiar</legend>
-            {/* ... campos dos membros ... */}
-            {membros.map((membro, index) => (
-              <div key={index} className="p-3 border rounded-md bg-gray-50 space-y-3">
-                <p className="font-semibold text-gray-700">Membro {index + 1}</p>
-                <input value={membro.nome} onChange={(e) => handleMembroChange(index, 'nome', e.target.value)} placeholder="Nome do membro" className="w-full p-3 border rounded-md" />
-                <div className="flex items-center gap-4">
-                  <input type="number" value={membro.idade} onChange={(e) => handleMembroChange(index, 'idade', e.target.value)} placeholder="Idade" className="w-1/2 p-3 border rounded-md" />
-                  <label className="flex items-center gap-2 text-gray-700"><input type="checkbox" checked={membro.pcd} onChange={(e) => handleMembroChange(index, 'pcd', e.target.checked)} className="h-5 w-5" />É PCD?</label>
+          {/* Seção 1: Identificação */}
+          <div className="p-4 border-l-4 border-emerald-500 bg-emerald-50 rounded-r-lg">
+            <h3 className="font-bold text-lg text-emerald-800 mb-2">1. Identificação do Responsável</h3>
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="nome_responsavel" className="block text-sm font-medium text-gray-700">Nome Completo *</label>
+                <input type="text" name="nome_responsavel" id="nome_responsavel" required className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="cpf_responsavel" className="block text-sm font-medium text-gray-700">CPF *</label>
+                  <input type="text" name="cpf_responsavel" id="cpf_responsavel" required className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+                </div>
+                <div>
+                  <label htmlFor="rg_responsavel" className="block text-sm font-medium text-gray-700">RG (Opcional)</label>
+                  <input type="text" name="rg_responsavel" id="rg_responsavel" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
                 </div>
               </div>
-            ))}
-            <button type="button" onClick={addMembroField} className="text-sm font-semibold text-blue-600 hover:underline">+ Adicionar outro membro</button>
-          </fieldset>
-
-          {/* Seção de Moradia e Emprego */}
-          <fieldset className="space-y-6">
-            <legend className="font-bold text-xl text-gray-700 border-b-2 border-emerald-200 pb-2 mb-4">3. Situação da Moradia e Emprego</legend>
-            <input name="endereco" placeholder="Endereço Completo (Rua, Número, Bairro)" className="w-full p-3 border rounded-md" required />
-            <input type="number" name="numero_moradores" placeholder="Nº total de moradores na casa" className="w-full p-3 border rounded-md" required min="1" />
-            <div>
-              <label className="font-semibold text-gray-700">Situação da Moradia:</label>
-              <select name="situacao_moradia" className="w-full p-3 border rounded-md mt-1">
-                <option value="perda_total">Perda total (inabitável)</option>
-                <option value="danos_graves">Danos graves (inabitável temporariamente)</option>
-                <option value="danos_parciais">Danos parciais (habitável com reparos)</option>
-                <option value="ilhada">Sem danos, mas ilhado/sem acesso</option>
-              </select>
-            </div>
-            <div>
-              <label className="font-semibold text-gray-700">Situação do Emprego do(s) Provedor(es):</label>
-              <select name="situacao_emprego" className="w-full p-3 border rounded-md mt-1">
-                <option value="">Selecione uma opção</option>
-                <option value="estavel">Emprego estável / não foi afetado</option>
-                <option value="local_atingido">O local de trabalho também foi atingido</option>
-                <option value="precisa_nova_renda">Perdeu o emprego / precisa de nova fonte de renda</option>
-                <option value="autonomo_impedido">Autônomo impedido de trabalhar</option>
-              </select>
-            </div>
-          </fieldset>
-
-          {/* Seção de Necessidades */}
-          <fieldset className="space-y-4">
-            <legend className="font-bold text-xl text-gray-700 border-b-2 border-emerald-200 pb-2 mb-4">4. Necessidades</legend>
-            <div>
-              <label className="font-semibold text-gray-700">Necessidades Imediatas:</label>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-2">
-                {['Abrigo temporário', 'Água potável', 'Cesta básica', 'Kit de higiene', 'Roupas/Cobertores', 'Atendimento psicológico', 'Lona'].map(item => (
-                  <label key={item} className="flex items-center space-x-2 p-2 rounded-md hover:bg-gray-100"><input type="checkbox" name="necessidades" value={item} className="h-5 w-5" /><span>{item}</span></label>
-                ))}
+              <div>
+                <label htmlFor="data_nascimento_responsavel" className="block text-sm font-medium text-gray-700">Data de Nascimento *</label>
+                <input type="date" name="data_nascimento_responsavel" id="data_nascimento_responsavel" required className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="telefone_contato" className="block text-sm font-medium text-gray-700">Telefone Principal (WhatsApp) *</label>
+                  <input type="tel" name="telefone_contato" id="telefone_contato" required className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+                </div>
+                <div>
+                  <label htmlFor="telefone_secundario" className="block text-sm font-medium text-gray-700">Telefone Secundário (Opcional)</label>
+                  <input type="tel" name="telefone_secundario" id="telefone_secundario" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+                </div>
               </div>
             </div>
-            <div>
-              <label htmlFor="outras_necessidades" className="font-semibold text-gray-700">Outras Necessidades (Ex: material de construção, móveis, etc.):</label>
-              <textarea id="outras_necessidades" name="outras_necessidades" rows="4" className="w-full p-3 border rounded-md mt-1" placeholder="Descreva aqui outros itens de necessidade..."></textarea>
-            </div>
-          </fieldset>
+          </div>
 
-          <button type="submit" className="w-full bg-emerald-600 text-white p-4 rounded-lg font-bold text-lg hover:bg-emerald-700 transition-colors">
-            Enviar Cadastro
-          </button>
+          {/* Seção 2: Composição Familiar */}
+          <div className="p-4 border-l-4 border-blue-500 bg-blue-50 rounded-r-lg">
+            <h3 className="font-bold text-lg text-blue-800 mb-2">2. Composição Familiar</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="adultos" className="block text-sm font-medium text-gray-700">Nº de Adultos</label>
+                <input type="number" name="adultos" id="adultos" required min="0" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label htmlFor="criancas" className="block text-sm font-medium text-gray-700">Nº de Crianças/Adolescentes</label>
+                <input type="number" name="criancas" id="criancas" required min="0" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+              </div>
+            </div>
+            <div className="mt-4 space-y-2">
+              <div className="flex items-center">
+                <input id="pcd" name="pcd" type="checkbox" className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                <label htmlFor="pcd" className="ml-2 block text-sm text-gray-900">Há pessoa com deficiência (PCD)?</label>
+              </div>
+              <div className="flex items-center">
+                <input id="gestante" name="gestante" type="checkbox" className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                <label htmlFor="gestante" className="ml-2 block text-sm text-gray-900">Há gestante?</label>
+              </div>
+            </div>
+            <div className="mt-6">
+              <h4 className="text-md font-semibold text-gray-800 mb-3">Membros da Família (Opcional)</h4>
+              {membros.map((membro, index) => (
+                <div key={index} className="flex items-end gap-2 p-2 border rounded-md bg-gray-50 mb-2">
+                  <div className="flex-grow">
+                    <label className="text-xs text-gray-600">Nome</label>
+                    <input type="text" name="nome" value={membro.nome} onChange={(e) => handleMembroChange(index, e)} className="w-full text-sm p-1 border-gray-200 rounded-md" />
+                  </div>
+                  <div className="flex-grow">
+                    <label className="text-xs text-gray-600">Data de Nascimento</label>
+                    <input type="date" name="data_nascimento" value={membro.data_nascimento} onChange={(e) => handleMembroChange(index, e)} className="w-full text-sm p-1 border-gray-200 rounded-md" />
+                  </div>
+                  {membros.length > 1 && <button type="button" onClick={() => removerMembro(index)} className="px-2 py-1 text-red-600 hover:text-red-800 text-sm">Remover</button>}
+                </div>
+              ))}
+              <button type="button" onClick={adicionarMembro} className="mt-2 text-sm text-blue-600 hover:text-blue-800 font-medium">+ Adicionar membro</button>
+            </div>
+          </div>
+
+          {/* Seção 3: Moradia e Situação */}
+          <div className="p-4 border-l-4 border-amber-500 bg-amber-50 rounded-r-lg">
+            <h3 className="font-bold text-lg text-amber-800 mb-2">3. Moradia e Situação Atual</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Situação da Moradia</label>
+                <div className="mt-2 flex gap-x-6">
+                  <div className="flex items-center"><input id="moradia_propria" name="situacao_moradia" type="radio" value="Própria" required className="h-4 w-4 border-gray-300 text-amber-600 focus:ring-amber-500" /><label htmlFor="moradia_propria" className="ml-2 block text-sm font-medium text-gray-700">Própria</label></div>
+                  <div className="flex items-center"><input id="moradia_alugada" name="situacao_moradia" type="radio" value="Alugada" className="h-4 w-4 border-gray-300 text-amber-600 focus:ring-amber-500" /><label htmlFor="moradia_alugada" className="ml-2 block text-sm font-medium text-gray-700">Alugada</label></div>
+                </div>
+              </div>
+              <div>
+                <label htmlFor="endereco_completo" className="block text-sm font-medium text-gray-700">Endereço da Moradia Atingida *</label>
+                <input type="text" name="endereco_completo" id="endereco_completo" required className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500" />
+              </div>
+              <div>
+                <label htmlFor="situacao_emprego" className="block text-sm font-medium text-gray-700">Situação de Emprego</label>
+                <select id="situacao_emprego" name="situacao_emprego" required className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500">
+                  <option value="">Selecione...</option>
+                  <option value="Empregado(a)">Empregado(a)</option>
+                  <option value="Autônomo(a)">Autônomo(a)</option>
+                  <option value="Desempregado(a)">Desempregado(a)</option>
+                  <option value="Aposentado(a)/Pensionista">Aposentado(a)/Pensionista</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Possui veículo?</label>
+                <div className="mt-2 flex gap-x-6">
+                  <div className="flex items-center"><input id="veiculo_sim" name="possui_veiculo" type="radio" value="Sim" required className="h-4 w-4 border-gray-300 text-amber-600 focus:ring-amber-500" /><label htmlFor="veiculo_sim" className="ml-2 block text-sm font-medium text-gray-700">Sim</label></div>
+                  <div className="flex items-center"><input id="veiculo_nao" name="possui_veiculo" type="radio" value="Não" className="h-4 w-4 border-gray-300 text-amber-600 focus:ring-amber-500" /><label htmlFor="veiculo_nao" className="ml-2 block text-sm font-medium text-gray-700">Não</label></div>
+                </div>
+              </div>
+              <div className="flex items-center">
+                <input id="veiculo_atingido" name="veiculo_atingido" type="checkbox" className="h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                <label htmlFor="veiculo_atingido" className="ml-2 block text-sm text-gray-900">O veículo foi atingido/danificado?</label>
+              </div>
+            </div>
+          </div>
+
+          {/* Seção 4: Necessidades */}
+          <div className="p-4 border-l-4 border-red-500 bg-red-50 rounded-r-lg">
+            <h3 className="font-bold text-lg text-red-800 mb-2">4. Necessidades Urgentes</h3>
+            <div>
+              <label htmlFor="necessidades_urgentes" className="block text-sm font-medium text-gray-700">Descreva as principais necessidades</label>
+              <textarea name="necessidades_urgentes" id="necessidades_urgentes" rows="3" required className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500"></textarea>
+            </div>
+            <div className="mt-4">
+              <label htmlFor="observacoes" className="block text-sm font-medium text-gray-700">Observações Adicionais</label>
+              <textarea name="observacoes" id="observacoes" rows="2" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500"></textarea>
+            </div>
+          </div>
+
+          {/* Botão de Envio */}
+          <div className="pt-5">
+            <button type="submit" disabled={isSubmitting} className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:bg-gray-400">
+              {isSubmitting ? 'Enviando...' : 'Enviar Cadastro'}
+            </button>
+          </div>
+
+          {submissionMessage && (
+            <div className={`mt-4 text-center p-3 rounded-md ${submissionMessage.includes('Erro') ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+              {submissionMessage}
+            </div>
+          )}
         </form>
-        {message && <p className="mt-6 text-center font-bold text-xl">{message}</p>}
       </div>
     </div>
   );
