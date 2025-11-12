@@ -1,43 +1,49 @@
 // Onde: app/layout.js
-// CÓDIGO COMPLETO DO LAYOUT COM CABEÇALHO E RODAPÉ
+// VERSÃO FINAL COM CABEÇALHO E RODAPÉ ATUALIZADOS
 
-import "./globals.css"; // Importa nossos estilos globais
+import { Inter } from "next/font/google";
+import "./globals.css";
+
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
-  title: "SOS Rio Bonito do Iguaçu",
-  description: "Plataforma de ajuda para as vítimas do tornado.",
+  title: "Ajuda Rio Bonito", // O título que aparece na aba do navegador
+  description: "Plataforma de cadastro e gestão de ajuda para as vítimas da tragédia em Rio Bonito do Iguaçu.",
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="pt-BR">
-      <body className="bg-green-700"> {/* Cor de fundo verde-esperança */}
-        <div className="flex flex-col min-h-screen">
-          {/* CABEÇALHO */}
-          <header className="bg-white shadow-md p-4">
-            <div className="container mx-auto flex justify-between items-center">
-              <h1 className="text-2xl font-bold text-emerald-700">
-                SOS Rio Bonito do Iguaçu
+      <body className={`${inter.className} bg-green-700`}>
+        <header className="bg-white shadow-md">
+          <div className="container mx-auto px-4 py-4 flex justify-between items-center">
+            <div>
+              {/* ===== INÍCIO DA ALTERAÇÃO ===== */}
+              <h1 className="text-2xl font-bold text-emerald-800">
+                Ajuda RIO BONITO
               </h1>
-              {/* Futuramente, o login pode vir aqui, mas por enquanto fica no /admin */}
-              <a href="/admin" className="text-sm font-medium text-gray-600 hover:text-emerald-700">
+              <p className="text-sm text-gray-600">
+                Cadastro de pedido de ajuda voluntária
+              </p>
+              {/* ===== FIM DA ALTERAÇÃO ===== */}
+            </div>
+            <div className="text-right">
+              <a href="/admin" className="text-sm font-medium text-gray-700 hover:text-emerald-600">
                 Acesso Restrito
               </a>
             </div>
-          </header>
+          </div>
+        </header>
 
-          {/* CONTEÚDO PRINCIPAL DA PÁGINA */}
-          <main className="flex-grow">
-            {children}
-          </main>
+        <main>
+          {children}
+        </main>
 
-          {/* RODAPÉ */}
-          <footer className="bg-white text-center p-4 mt-8 shadow-inner">
-            <p className="text-sm text-gray-500">
-              Desenvolvido por <a href="http://www.otrabalhador.com.br" target="_blank" rel="noopener noreferrer" className="font-semibold text-emerald-600 hover:underline">www.otrabalhador.com.br</a>
-            </p>
-          </footer>
-        </div>
+        <footer className="bg-gray-800 text-white mt-12 py-4">
+          <div className="container mx-auto text-center text-sm">
+            <p>&copy; 2025 | Desenvolvido por <a href="http://www.otrabalhador.com.br" target="_blank" rel="noopener noreferrer" className="font-bold hover:underline">www.otrabalhador.com.br</a></p>
+          </div>
+        </footer>
       </body>
     </html>
    );
