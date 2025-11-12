@@ -1,5 +1,5 @@
 // Onde: app/admin/page.js
-// VERSÃO 3.0 - REINTRODUZINDO FILTROS E IMPRESSÃO NO NOVO LAYOUT
+// VERSÃO 6.0 - CÓDIGO COMPLETO - SEGURANÇA RESTAURADA + TODAS AS FUNCIONALIDADES
 
 "use client";
 
@@ -7,74 +7,125 @@ import { useState, useEffect, useRef } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import { supabase } from '../../lib/supabaseClient';
 
-export default function AdminPage() {
+// --- COMPONENTE PRINCIPAL QUE CONTROLA O ACESSO ---
+export default function AdminAuth() {
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+    useEffect(() => {
+        // Verifica se a senha já foi validada na sessão atual
+        if (sessionStorage.getItem('admin-auth') === 'true') {
+            setIsAuthenticated(true);
+            return;
+        }
+
+        // Pede a senha
+        const password = prompt("Por favor, digite a senha para acessar a área administrativa:");
+        
+        // A SENHA DEVE SER A MESMA QUE VOCÊ DEFINIU ANTES
+        // NOTA: Esta é uma segurança básica. Para produção real, um sistema de login seria mais seguro.
+        if (password === "ajuda-rio-bonito-2024") { // <-- Usando a senha do .env.local (verifique se está correta)
+            sessionStorage.setItem('admin-auth', 'true'); // Salva o estado de autenticação na sessão
+            setIsAuthenticated(true);
+        } else {
+            alert("Senha incorreta. Acesso negado.");
+            // Redireciona para a página inicial se a senha estiver errada
+            window.location.href = '/'; 
+        }
+    }, []); // Executa apenas uma vez, quando o componente é montado
+
+    // Se não estiver autenticado, mostra uma mensagem de carregamento/verificação
+    if (!isAuthenticated) {
+        return <div className="text-center p-10">Verificando autenticação...</div>;
+    }
+
+    // Se estiver autenticado, renderiza o painel de administração completo
+    return <AdminPanel />;
+}
+
+
+// --- O PAINEL DE ADMINISTRAÇÃO COMPLETO ---
+// (Todo o nosso código anterior agora está dentro deste componente)
+
+// Hook customizado para debounce
+function useDebounce(value, delay) {
+    const [debouncedValue, setDebouncedValue] = useState(value);
+    useEffect(() => {
+        const handler = setTimeout(() => { setDebouncedValue(value); }, delay);
+        return () => { clearTimeout(handler); };
+    }, [value, delay]);
+    return debouncedValue;
+}
+
+const todasAsNecessidades = [
+    "Alimentos", "Água potável", "Colchões", "Roupas de cama", "Roupas (adulto)", "Roupas (criança)",
+    "Calçados", "Produtos de higiene", "Produtos de limpeza", "Fraldas", "Móveis", "Eletrodomésticos",
+    "Madeira (telhado)", "Madeira (parede)", "Caibros", "Tijolos", "Cimento", "Areia", "Brita", "Brasilit", "Telhas"
+];
+
+function AdminPanel() {
     const [todasFamilias, setTodasFamilias] = useState([]);
     const [familiasFiltradas, setFamiliasFiltradas] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [selectedFamilia, setSelectedFamilia] = useState(null);
 
-    // Estados para os filtros
+    const [filtroNome, setFiltroNome] = useState('');
+    const [filtroEndereco, setFiltroEndereco] = useState('');
     const [filtroMoradia, setFiltroMoradia] = useState('Todas');
     const [filtroEmprego, setFiltroEmprego] = useState('Todas');
+    const [filtroQualificacaoMoradia, setFiltroQualificacaoMoradia] = useState('Todas');
+    const [filtroNecessidade, setFiltroNecessidade] = useState('Todas');
 
+    const debouncedNome = useDebounce(filtroNome, 500);
+    const debouncedEndereco = useDebounce(filtroEndereco, 500);
     const componentToPrintRef = useRef();
 
-    // Função para buscar os dados no Supabase
     const fetchFamilias = async () => {
         setLoading(true);
-        const { data, error } = await supabase
-            .from('vitimas')
-            .select('*')
-            .order('created_at', { ascending: false });
-
+        const { data, error } = await supabase.from('vitimas').select('*').order('created_at', { ascending: false });
         if (error) {
             console.error("Erro ao buscar famílias:", error);
             setError("Não foi possível carregar os dados.");
         } else {
             setTodasFamilias(data);
-            setFamiliasFiltradas(data); // Inicialmente, mostra todas
+            setFamiliasFiltradas(data);
         }
         setLoading(false);
     };
 
-    // Efeito para carregar os dados iniciais
-    useEffect(() => {
-        fetchFamilias();
-    }, []);
+    useEffect(() => { fetchFamilias(); }, []);
 
-    // Efeito para aplicar os filtros quando eles mudam
     useEffect(() => {
         let familias = [...todasFamilias];
-
-        if (filtroMoradia !== 'Todas') {
-            familias = familias.filter(f => f.situacao_moradia === filtroMoradia);
+        if (debouncedNome) familias = familias.filter(f => f.nome_responsavel.toLowerCase().includes(debouncedNome.toLowerCase()));
+        if (debouncedEndereco) familias = familias.filter(f => f.endereco_completo && f.endereco_completo.toLowerCase().includes(debouncedEndereco.toLowerCase()));
+        if (filtroMoradia !== 'Todas') familias = familias.filter(f => f.situacao_moradia === filtroMoradia);
+        if (filtroEmprego !== 'Todas') familias = familias.filter(f => f.situacao_emprego === filtroEmprego);
+        if (filtroQualificacaoMoradia !== 'Todas') familias = familias.filter(f => f.qualificacao_moradia === filtroQualificacaoMoradia);
+        if (filtroNecessidade !== 'Todas') {
+            familias = familias.filter(f => f.lista_necessidades && f.lista_necessidades.includes(filtroNecessidade));
         }
-
-        if (filtroEmprego !== 'Todas') {
-            familias = familias.filter(f => f.situacao_emprego === filtroEmprego);
-        }
-
         setFamiliasFiltradas(familias);
-        // Desseleciona a família se ela não estiver mais na lista filtrada
         if (selectedFamilia && !familias.find(f => f.id === selectedFamilia.id)) {
             setSelectedFamilia(null);
         }
+    }, [debouncedNome, debouncedEndereco, filtroMoradia, filtroEmprego, filtroQualificacaoMoradia, filtroNecessidade, todasFamilias]);
 
-    }, [filtroMoradia, filtroEmprego, todasFamilias, selectedFamilia]);
-
-
-    const handleSelectFamilia = (familia) => {
-        setSelectedFamilia(familia);
+    const limparTodosFiltros = () => {
+        setFiltroNome('');
+        setFiltroEndereco('');
+        setFiltroMoradia('Todas');
+        setFiltroEmprego('Todas');
+        setFiltroQualificacaoMoradia('Todas');
+        setFiltroNecessidade('Todas');
     };
 
-    // Função de impressão
     const handlePrint = useReactToPrint({
         content: () => componentToPrintRef.current,
         documentTitle: `Detalhes_Familia_${selectedFamilia?.nome_responsavel.replace(/\s/g, '_') || 'N/A'}`,
     });
 
-    if (loading) return <div className="text-center p-10">Carregando dados...</div>;
+    if (loading) return <div className="text-center p-10">Carregando...</div>;
     if (error) return <div className="text-center p-10 text-red-500">{error}</div>;
 
     return (
@@ -82,45 +133,32 @@ export default function AdminPage() {
             <div className="max-w-7xl mx-auto">
                 <header className="mb-6">
                     <h1 className="text-3xl font-bold text-gray-900">Painel de Administração</h1>
-                    <p className="text-gray-600">Visualize e gerencie os cadastros das famílias.</p>
+                    <p className="text-gray-600">Visualize, filtre e gerencie os cadastros das famílias.</p>
                 </header>
 
-                {/* Seção de Filtros e Ações */}
                 <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end">
-                        <div>
-                            <label htmlFor="filtro-moradia" className="block text-sm font-medium text-gray-700">Filtrar por Moradia</label>
-                            <select id="filtro-moradia" value={filtroMoradia} onChange={(e) => setFiltroMoradia(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
-                                <option>Todas</option>
-                                <option>Própria</option>
-                                <option>Alugada</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label htmlFor="filtro-emprego" className="block text-sm font-medium text-gray-700">Filtrar por Emprego</label>
-                            <select id="filtro-emprego" value={filtroEmprego} onChange={(e) => setFiltroEmprego(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
-                                <option>Todas</option>
-                                <option>Empregado(a)</option>
-                                <option>Autônomo(a)</option>
-                                <option>Desempregado(a)</option>
-                                <option>Aposentado(a)/Pensionista</option>
-                            </select>
-                        </div>
-                        <div className="md:col-span-2 flex justify-end gap-2">
-                             <button onClick={() => { setFiltroMoradia('Todas'); setFiltroEmprego('Todas'); }} className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600">Limpar Filtros</button>
-                             <button onClick={handlePrint} disabled={!selectedFamilia} className="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed">Imprimir Selecionado</button>
-                        </div>
+                    <h3 className="text-lg font-semibold mb-3">Filtros de Busca</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        <FilterInput label="Nome do Responsável" value={filtroNome} onChange={setFiltroNome} placeholder="Digite um nome..." />
+                        <FilterInput label="Endereço" value={filtroEndereco} onChange={setFiltroEndereco} placeholder="Digite um endereço..." />
+                        <FilterSelect label="Filtrar por Necessidade" value={filtroNecessidade} onChange={setFiltroNecessidade} options={todasAsNecessidades} />
+                        <FilterSelect label="Situação da Moradia" value={filtroMoradia} onChange={setFiltroMoradia} options={['Própria', 'Alugada']} />
+                        <FilterSelect label="Qualificação da Moradia" value={filtroQualificacaoMoradia} onChange={setFiltroQualificacaoMoradia} options={['Habitável com danos', 'Inabitável (Temporário)', 'Inabitável (Permanente / Perda total)']} />
+                        <FilterSelect label="Situação de Emprego" value={filtroEmprego} onChange={setFiltroEmprego} options={['Empregado(a)', 'Autônomo(a)', 'Desempregado(a)', 'Aposentado(a)/Pensionista']} />
+                    </div>
+                    <div className="mt-4 flex justify-end gap-2">
+                        <button onClick={limparTodosFiltros} className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600">Limpar Filtros</button>
+                        <button onClick={handlePrint} disabled={!selectedFamilia} className="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 disabled:bg-gray-300">Imprimir Selecionado</button>
                     </div>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Coluna da Lista de Famílias */}
                     <div className="lg:col-span-1 bg-white rounded-lg shadow-md p-4">
                         <h2 className="text-xl font-semibold mb-4">Famílias Encontradas ({familiasFiltradas.length})</h2>
                         <div className="overflow-y-auto max-h-[60vh]">
                             <ul className="divide-y divide-gray-200">
                                 {familiasFiltradas.map((familia) => (
-                                    <li key={familia.id} onClick={() => handleSelectFamilia(familia)} className={`p-3 cursor-pointer hover:bg-emerald-50 ${selectedFamilia?.id === familia.id ? 'bg-emerald-100' : ''}`}>
+                                    <li key={familia.id} onClick={() => setSelectedFamilia(familia)} className={`p-3 cursor-pointer hover:bg-emerald-50 ${selectedFamilia?.id === familia.id ? 'bg-emerald-100' : ''}`}>
                                         <p className="font-semibold text-emerald-800">{familia.nome_responsavel}</p>
                                         <p className="text-sm text-gray-500">{familia.cpf_responsavel}</p>
                                     </li>
@@ -128,26 +166,25 @@ export default function AdminPage() {
                             </ul>
                         </div>
                     </div>
-
-                    {/* Coluna de Detalhes da Família Selecionada */}
                     <div className="lg:col-span-2">
                         {selectedFamilia ? (
                             <div ref={componentToPrintRef} className="bg-white rounded-lg shadow-md p-6 print-container">
                                 <h2 className="text-2xl font-bold text-gray-800 mb-4">{selectedFamilia.nome_responsavel}</h2>
                                 <div className="space-y-6">
-                                    {/* Seções de detalhes... */}
                                     <DetalhesSection title="Identificação">
                                         <InfoItem label="CPF" value={selectedFamilia.cpf_responsavel} />
                                         <InfoItem label="RG" value={selectedFamilia.rg_responsavel} />
-                                        <InfoItem label="Data de Nascimento" value={new Date(selectedFamilia.data_nascimento_responsavel + 'T00:00:00').toLocaleDateString()} />
+                                        <InfoItem label="Data de Nascimento" value={selectedFamilia.data_nascimento_responsavel ? new Date(selectedFamilia.data_nascimento_responsavel + 'T00:00:00').toLocaleDateString() : 'N/A'} />
                                         <InfoItem label="Telefone Principal" value={selectedFamilia.telefone_contato} />
                                         <InfoItem label="Telefone Secundário" value={selectedFamilia.telefone_secundario} />
                                     </DetalhesSection>
 
-                                    <DetalhesSection title="Moradia e Situação">
+                                    <DetalhesSection title="Moradia e Emprego">
                                         <InfoItem label="Endereço" value={selectedFamilia.endereco_completo} />
-                                        <InfoItem label="Situação da Moradia" value={selectedFamilia.situacao_moradia} />
+                                        <InfoItem label="Tipo de Moradia" value={selectedFamilia.situacao_moradia} />
+                                        <InfoItem label="Situação da Residência" value={selectedFamilia.qualificacao_moradia} highlight />
                                         <InfoItem label="Situação de Emprego" value={selectedFamilia.situacao_emprego} />
+                                        <InfoItem label="Local de Trabalho Atingido" value={selectedFamilia.local_trabalho_atingido ? 'Sim' : 'Não'} highlight />
                                         <InfoItem label="Possui Veículo" value={selectedFamilia.possui_veiculo} />
                                         <InfoItem label="Veículo Atingido" value={selectedFamilia.veiculo_atingido ? 'Sim' : 'Não'} />
                                     </DetalhesSection>
@@ -170,9 +207,17 @@ export default function AdminPage() {
                                     </DetalhesSection>
 
                                     <DetalhesSection title="Necessidades e Observações">
-                                        <div className="sm:col-span-2">
-                                            <p className="text-gray-800 mt-1 bg-yellow-50 p-3 rounded"><strong>Necessidades Urgentes:</strong> {selectedFamilia.necessidades_urgentes || 'Nenhuma registrada'}</p>
-                                            <p className="text-gray-800 mt-2"><strong>Observações:</strong> {selectedFamilia.observacoes || 'Nenhuma registrada'}</p>
+                                        {selectedFamilia.lista_necessidades && selectedFamilia.lista_necessidades.length > 0 && (
+                                            <div className="sm:col-span-2">
+                                                <h4 className="text-sm font-medium text-gray-500">Itens Solicitados:</h4>
+                                                <div className="flex flex-wrap gap-2 mt-1">
+                                                    {selectedFamilia.lista_necessidades.map(item => <span key={item} className="bg-red-100 text-red-800 text-xs font-medium px-2.5 py-0.5 rounded">{item}</span>)}
+                                                </div>
+                                            </div>
+                                        )}
+                                        <div className="sm:col-span-2 mt-4">
+                                            <p className="text-gray-800 bg-yellow-50 p-3 rounded"><strong>Outras Necessidades / Detalhes:</strong> {selectedFamilia.necessidades_urgentes || 'Nenhuma registrada'}</p>
+                                            <p className="text-gray-800 mt-2"><strong>Observações (Uso Interno):</strong> {selectedFamilia.observacoes || 'Nenhuma registrada'}</p>
                                         </div>
                                     </DetalhesSection>
                                 </div>
@@ -189,7 +234,28 @@ export default function AdminPage() {
     );
 }
 
-// Componentes auxiliares para manter o código limpo
+// --- Componentes Auxiliares para um código mais limpo ---
+function FilterInput({ label, value, onChange, placeholder }) {
+    return (
+        <div>
+            <label htmlFor={`filtro-${label}`} className="block text-sm font-medium text-gray-700">{label}</label>
+            <input type="text" id={`filtro-${label}`} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" />
+        </div>
+    );
+}
+
+function FilterSelect({ label, value, onChange, options }) {
+    return (
+        <div>
+            <label htmlFor={`filtro-${label}`} className="block text-sm font-medium text-gray-700">{label}</label>
+            <select id={`filtro-${label}`} value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                <option>Todas</option>
+                {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            </select>
+        </div>
+    );
+}
+
 function DetalhesSection({ title, children }) {
     return (
         <div>
@@ -199,11 +265,11 @@ function DetalhesSection({ title, children }) {
     );
 }
 
-function InfoItem({ label, value }) {
+function InfoItem({ label, value, highlight = false }) {
     return (
-        <div>
+        <div className={highlight ? 'bg-blue-50 p-2 rounded-md' : ''}>
             <dt className="text-sm font-medium text-gray-500">{label}</dt>
-            <dd className="mt-1 text-sm text-gray-900">{value || 'Não informado'}</dd>
+            <dd className="mt-1 text-sm text-gray-900 font-medium">{value || 'Não informado'}</dd>
         </div>
     );
 }
