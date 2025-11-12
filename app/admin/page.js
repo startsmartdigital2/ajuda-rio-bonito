@@ -1,17 +1,24 @@
 // Onde: app/admin/page.js
-// CÓDIGO COMPLETO E CORRIGIDO DA PÁGINA DE LOGIN
+// CÓDIGO DE LOGIN - CORRETO E VALIDADO POR VOCÊ
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import AdminDashboard from './AdminDashboard';
+import AdminDashboard from './AdminDashboard'; // Importa o painel
 
 export default function AdminLoginPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [error, setError] = useState('');
   const [user, setUser] = useState('');
   const [password, setPassword] = useState('');
+
+  // Tenta autenticar pela sessão ao carregar a página
+  useEffect(() => {
+    if (sessionStorage.getItem('admin-authenticated') === 'true') {
+      setIsAuthenticated(true);
+    }
+  }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -25,33 +32,30 @@ export default function AdminLoginPage() {
         .single();
 
       if (fetchError || !data) {
-        setError('Usuário não encontrado.');
+        setError('Usuário ou senha inválidos.');
         return;
       }
 
       if (data.senha === password) {
+        sessionStorage.setItem('admin-authenticated', 'true'); // Salva na sessão
         setIsAuthenticated(true);
       } else {
-        setError('Senha incorreta.');
+        setError('Usuário ou senha inválidos.');
       }
     } catch (err) {
       setError('Ocorreu um erro ao tentar fazer login.');
     }
   };
 
-  // **A CORREÇÃO ESTÁ AQUI**
-  // A função de logout é definida no escopo principal do componente.
   const handleLogout = () => {
+    sessionStorage.removeItem('admin-authenticated'); // Limpa a sessão
     setIsAuthenticated(false);
   };
 
-  // Se o login foi bem-sucedido, mostra o Painel ADM.
   if (isAuthenticated) {
-    // Agora passamos a função que já foi definida.
     return <AdminDashboard onLogout={handleLogout} />;
   }
 
-  // Se não, mostra a tela de login.
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-200">
       <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md">
