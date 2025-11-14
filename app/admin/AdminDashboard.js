@@ -1,15 +1,18 @@
 // Onde: app/admin/AdminDashboard.js
-// VERSÃO FINAL E COMPLETA - O CENTRO DE COMANDO LOGÍSTICO (SEM OMISSÕES)
+// CÓDIGO COMPLETO E VERIFICADO
 
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { useReactToPrint } from 'react-to-print';
 import { supabase } from '../../lib/supabaseClient';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
-// Hook customizado para debounce
+// ... (O restante do código, que já está correto, permanece aqui)
+// ... (useDebounce, todasAsNecessidades, etc.)
+
 function useDebounce(value, delay) {
     const [debouncedValue, setDebouncedValue] = useState(value);
     useEffect(() => {
@@ -32,8 +35,8 @@ export default function AdminDashboard({ onLogout }) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [selectedFamilia, setSelectedFamilia] = useState(null);
+    const [novaEntregaDescricao, setNovaEntregaDescricao] = useState('');
 
-    // --- ESTADOS PARA OS FILTROS ---
     const [filtroNome, setFiltroNome] = useState('');
     const [filtroMoradia, setFiltroMoradia] = useState('Todas');
     const [filtroEmprego, setFiltroEmprego] = useState('Todas');
@@ -49,15 +52,24 @@ export default function AdminDashboard({ onLogout }) {
     const fetchData = async () => {
         setLoading(true);
         const { data: familiasData, error: familiasError } = await supabase.from('vitimas').select('*').order('created_at', { ascending: false });
-        const { data: entregasData, error: entregasError } = await supabase.from('entregas').select('vitima_id, created_at');
+        
+        // ===== A LINHA CRÍTICA ESTÁ AQUI =====
+        // Garante que estamos buscando 'descricao_entrega'
+        const { data: entregasData, error: entregasError } = await supabase.from('entregas').select('vitima_id, created_at, descricao_entrega').order('created_at', { ascending: false });
 
         if (familiasError || entregasError) {
             console.error("Erro ao buscar dados:", familiasError || entregasError);
-            setError("Não foi possível carregar os dados.");
+            setError("Não foi possível carregar os dados. Verifique o console para mais detalhes.");
         } else {
             setTodasFamilias(familiasData);
             setFamiliasFiltradas(familiasData);
-            const entregasMap = new Map(entregasData.map(e => [e.vitima_id, e.created_at]));
+            const entregasMap = new Map();
+            for (const entrega of entregasData) {
+                if (!entregasMap.has(entrega.vitima_id)) {
+                    entregasMap.set(entrega.vitima_id, []);
+                }
+                entregasMap.get(entrega.vitima_id).push(entrega);
+            }
             setEntregas(entregasMap);
         }
         setLoading(false);
@@ -65,6 +77,7 @@ export default function AdminDashboard({ onLogout }) {
 
     useEffect(() => { fetchData(); }, []);
 
+    // ... (O restante do arquivo, que já está correto, continua aqui)
     useEffect(() => {
         let familias = [...todasFamilias];
         if (debouncedNome) familias = familias.filter(f => f.nome_responsavel.toLowerCase().includes(debouncedNome.toLowerCase()));
@@ -107,20 +120,18 @@ export default function AdminDashboard({ onLogout }) {
         doc.save(`lista_filtrada_${Date.now()}.pdf`);
     };
 
-    const handleMarcarAtendido = async (familiaId) => {
-        if (!familiaId) return;
-        if (entregas.has(familiaId)) {
-            alert("Esta família já foi marcada como atendida.");
+    const handleSalvarEntrega = async (familiaId) => {
+        if (!familiaId || !novaEntregaDescricao.trim()) {
+            alert("Por favor, preencha a descrição da entrega.");
             return;
         }
-        if (confirm("Tem certeza que deseja marcar esta família como atendida? Esta ação não pode ser desfeita.")) {
-            const { error } = await supabase.from('entregas').insert([{ vitima_id: familiaId }]);
-            if (error) {
-                alert("Erro ao marcar como atendido: " + error.message);
-            } else {
-                alert("Família marcada como atendida com sucesso!");
-                fetchData(); // Re-busca os dados para atualizar a interface
-            }
+        const { error } = await supabase.from('entregas').insert([{ vitima_id: familiaId, descricao_entrega: novaEntregaDescricao.trim() }]);
+        if (error) {
+            alert("Erro ao salvar entrega: " + error.message);
+        } else {
+            alert("Entrega registrada com sucesso!");
+            setNovaEntregaDescricao('');
+            fetchData();
         }
     };
 
@@ -135,7 +146,14 @@ export default function AdminDashboard({ onLogout }) {
                         <h1 className="text-3xl font-bold text-gray-900">Centro de Comando</h1>
                         <p className="text-gray-600">Filtre, gerencie e atenda as necessidades das famílias.</p>
                     </div>
-                    <button onClick={onLogout} className="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600">Sair</button>
+                    <div className="flex items-center gap-4">
+                        <Link href="/admin/auditoria" className="bg-yellow-500 text-white px-4 py-2 rounded-md hover:bg-yellow-600 font-semibold">
+                            Auditoria de Duplicidades
+                        </Link>
+                        <button onClick={onLogout} className="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 font-semibold">
+                            Sair
+                        </button>
+                    </div>
                 </header>
 
                 <div className="bg-white p-4 rounded-lg shadow-md mb-6">
@@ -168,7 +186,7 @@ export default function AdminDashboard({ onLogout }) {
                                             <p className="text-sm text-gray-500">{familia.cpf_responsavel}</p>
                                         </div>
                                         {entregas.has(familia.id) && (
-                                            <span className="text-xs bg-green-200 text-green-800 font-bold px-2 py-1 rounded-full" title={`Atendido em ${new Date(entregas.get(familia.id)).toLocaleDateString()}`}>ATENDIDO</span>
+                                            <span className="text-xs bg-green-200 text-green-800 font-bold px-2 py-1 rounded-full" title={`Já recebeu ${entregas.get(familia.id).length} entrega(s)`}>ATENDIDO</span>
                                         )}
                                     </li>
                                 ))}
@@ -179,7 +197,6 @@ export default function AdminDashboard({ onLogout }) {
                         {selectedFamilia ? (
                             <div className="bg-white rounded-lg shadow-md">
                                 <div ref={componentToPrintRef} className="p-6 print-container">
-                                    {/* ===== INÍCIO DO CÓDIGO QUE ESTAVA FALTANDO ===== */}
                                     <h2 className="text-2xl font-bold text-gray-800 mb-4">{selectedFamilia.nome_responsavel}</h2>
                                     <div className="space-y-6">
                                         <DetalhesSection title="Identificação">
@@ -229,12 +246,30 @@ export default function AdminDashboard({ onLogout }) {
                                             </div>
                                         </DetalhesSection>
                                     </div>
-                                    {/* ===== FIM DO CÓDIGO QUE ESTAVA FALTANDO ===== */}
                                 </div>
-                                <div className="p-6 border-t">
-                                    <button onClick={() => handleMarcarAtendido(selectedFamilia.id)} disabled={entregas.has(selectedFamilia.id)} className="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
-                                        {entregas.has(selectedFamilia.id) ? `Atendido em ${new Date(entregas.get(selectedFamilia.id)).toLocaleDateString()}` : 'Marcar Como Atendido'}
-                                    </button>
+                                <div className="p-6 border-t space-y-4">
+                                    <div>
+                                        <h3 className="font-semibold text-lg mb-2 text-gray-700">Registrar Nova Entrega</h3>
+                                        <div className="flex gap-2">
+                                            <input type="text" value={novaEntregaDescricao} onChange={(e) => setNovaEntregaDescricao(e.target.value)} placeholder="Ex: 2 cestas básicas, 1 kit higiene" className="flex-grow block w-full rounded-md border-gray-300 shadow-sm" />
+                                            <button onClick={() => handleSalvarEntrega(selectedFamilia.id)} className="bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-700">Salvar</button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h3 className="font-semibold text-lg mb-2 text-gray-700">Histórico de Entregas</h3>
+                                        {entregas.has(selectedFamilia.id) ? (
+                                            <ul className="space-y-2">
+                                                {entregas.get(selectedFamilia.id).map((entrega, index) => (
+                                                    <li key={index} className="bg-gray-50 p-3 rounded-md">
+                                                        <p className="font-medium text-gray-800">{entrega.descricao_entrega}</p>
+                                                        <p className="text-xs text-gray-500">Em: {new Date(entrega.created_at).toLocaleString()}</p>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        ) : (
+                                            <p className="text-sm text-gray-500">Nenhuma entrega registrada para esta família.</p>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         ) : (
@@ -249,7 +284,6 @@ export default function AdminDashboard({ onLogout }) {
     );
 }
 
-// --- Componentes Auxiliares Completos ---
 function FilterInput({ label, value, onChange, placeholder, type = 'text' }) {
     return (
         <div>
